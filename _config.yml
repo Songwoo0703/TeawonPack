@@ -1,0 +1,6 @@
+# 기본 설정
+theme: jekyll-theme-primer  # 로그에 나온 테마 사용
+title: Songwoo0703 Project  # 사이트 제목 (원하는 이름으로 변경)
+description: A simple GitHub Pages site  # 간단한 설명
+source: ./  # 소스 디렉토리 (기본값)
+destination: ./_site  # 빌드 출력 경로 (GitHub Actions에서 자동 처리)
