@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>지관 갯수 현황판</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
   <style>
     body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
     .container { max-width: 1000px; margin: auto; }
@@ -14,7 +15,6 @@
     .card h3 { margin: 0; color: #7f8c8d; }
     .card p { font-size: 1.8em; font-weight: bold; margin: 5px 0; }
     .low { color: #e74c3c; }
-    .normal { color: #27ae60; }
     .search { margin: 15px 0; }
     .search input { padding: 10px; width: 300px; font-size: 1em; }
     table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; }
@@ -26,44 +26,23 @@
     #addForm { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
     #addForm input, #addForm select { margin: 5px; padding: 8px; width: 180px; }
     #addForm button { padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    #addForm button:hover { background: #2980b9; }
     .adjust-btn { padding: 5px 10px; margin: 0 3px; background: #bdc3c7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; }
     .adjust-btn.in { background: #27ae60; }
     .adjust-btn.out { background: #e74c3c; }
     .adjust-btn:hover { opacity: 0.8; }
     .num-input { width: 70px; text-align: center; padding: 5px; }
-    .delete-btn { background: #e74c3c; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 1em; }
-    .delete-btn:hover { background: #c0392b; }
-
-    /* 비밀번호 모달 */
-    #passwordModal {
-      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;
-    }
-    .modal-content {
-      background: white; padding: 30px; border-radius: 15px; width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-    .modal-content h2 { margin-top: 0; color: #2c3e50; }
-    .modal-content input {
-      width: 80%; padding: 12px; margin: 15px 0; font-size: 1.2em; text-align: center; border: 2px solid #ddd; border-radius: 8px;
-    }
-    .modal-content button {
-      padding: 12px 30px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1em;
-    }
-    .modal-content button:hover { background: #2980b9; }
+    .delete-btn { background: #e74c3c; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; }
+    #passwordModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 30px; border-radius: 15px; width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    .modal-content input { width: 80%; padding: 12px; margin: 15px 0; font-size: 1.2em; text-align: center; border: 2px solid #ddd; border-radius: 8px; }
+    .modal-content button { padding: 12px 30px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; }
     .error { color: #e74c3c; font-size: 0.9em; margin-top: 5px; display: none; }
-
-    /* 로그아웃 버튼 */
-    #logoutBtn {
-      position: absolute; top: 20px; right: 20px; padding: 8px 15px; background: #95a5a6; color: white;
-      border: none; border-radius: 5px; cursor: pointer; font-size: 0.9em;
-    }
-    #logoutBtn:hover { background: #7f8c8d; }
+    #logoutBtn { position: absolute; top: 20px; right: 20px; padding: 8px 15px; background: #95a5a6; color: white; border: none; border-radius: 5px; cursor: pointer; display: none; }
   </style>
 </head>
 <body>
 
-  <!-- 비밀번호 입력 모달 -->
+  <!-- 비밀번호 모달 -->
   <div id="passwordModal">
     <div class="modal-content">
       <h2>비밀번호 입력</h2>
@@ -74,15 +53,12 @@
     </div>
   </div>
 
-  <!-- 로그아웃 버튼 (현황판 진입 후 표시) -->
-  <button id="logoutBtn" style="display:none;" onclick="logout()">로그아웃</button>
+  <button id="logoutBtn" onclick="logout()">로그아웃</button>
 
-  <!-- 메인 현황판 (초기 숨김) -->
   <div class="container" id="mainContent" style="display:none;">
     <h1>지관 갯수 현황판</h1>
-    <p style="text-align:center; color:#7f8c8d">입고 - 출고 기반 실시간 재고 관리 | <span id="last-update"></span></p>
+    <p style="text-align:center; color:#7f8c8d">구글 시트 실시간 연동 | <span id="last-update"></span></p>
 
-    <!-- 새 규격 추가 폼 -->
     <form id="addForm">
       <h3>새 지관 규격 추가</h3>
       <input type="text" id="newLength" placeholder="길이 (예: 1200mm)" required>
@@ -101,22 +77,12 @@
     </div>
 
     <div class="search">
-      <input type="text" id="searchInput" placeholder="길이 또는 종류로 검색 (예: 1000 또는 연마)" onkeyup="filterTable()">
+      <input type="text" id="searchInput" placeholder="길이 또는 종류로 검색" onkeyup="filterTable()">
     </div>
 
     <table id="inventoryTable">
       <thead>
-        <tr>
-          <th>길이</th>
-          <th>종류</th>
-          <th>입고</th>
-          <th>출고</th>
-          <th>현재 재고</th>
-          <th>상태</th>
-          <th>입고</th>
-          <th>출고</th>
-          <th>삭제</th>
-        </tr>
+        <tr><th>길이</th><th>종류</th><th>입고</th><th>출고</th><th>현재 재고</th><th>상태</th><th>입고</th><th>출고</th><th>삭제</th></tr>
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
@@ -125,135 +91,100 @@
   </div>
 
   <script>
+    // 설정값 (완성!)
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/1gYgJLNalSkrxO-etWVvAYeUuBS0h4phIEdLerpP1Mxk/export?format=csv";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxjJnfrn55wPghz_Exshr1WDHcxuZ8dmcvdNGd9UfVDNe7woccZ5YYg-e0v9ZBrtQmQ9A/exec";
     const CORRECT_PASSWORD = "1706";
-    const SESSION_KEY = "tubeAccessSession";
-    const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24시간
 
-    // 비밀번호 확인
+    // 비밀번호
     function checkPassword() {
-      const input = document.getElementById("passwordInput").value;
-      const errorMsg = document.getElementById("errorMsg");
-
-      if (input === CORRECT_PASSWORD) {
-        const now = Date.now();
-        const session = { timestamp: now };
-        localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      if (document.getElementById("passwordInput").value === CORRECT_PASSWORD) {
+        localStorage.setItem("tubeAccess", "true");
         showMainContent();
       } else {
-        errorMsg.style.display = "block";
-        document.getElementById("passwordInput").value = "";
+        document.getElementById("errorMsg").style.display = "block";
       }
     }
-
-    // 세션 확인 및 메인 화면 표시
     function showMainContent() {
       document.getElementById("passwordModal").style.display = "none";
       document.getElementById("mainContent").style.display = "block";
       document.getElementById("logoutBtn").style.display = "block";
-      initApp(); // 현황판 초기화
+      loadData();
+      setInterval(loadData, 10000); // 10초마다 갱신
     }
+    function logout() { localStorage.removeItem("tubeAccess"); location.reload(); }
+    if (localStorage.getItem("tubeAccess")) showMainContent();
+    else document.getElementById("passwordModal").style.display = "flex";
 
-    // 로그아웃
-    function logout() {
-      localStorage.removeItem(SESSION_KEY);
-      location.reload();
-    }
-
-    // 세션 유효성 검사
-    function checkSession() {
-      const session = JSON.parse(localStorage.getItem(SESSION_KEY));
-      if (session && (Date.now() - session.timestamp < SESSION_DURATION)) {
-        showMainContent();
-      } else {
-        document.getElementById("passwordModal").style.display = "flex";
-        document.getElementById("passwordInput").focus();
-      }
-    }
-
-    // 엔터키로 비밀번호 제출
-    document.getElementById("passwordInput").addEventListener("keypress", (e) => {
-      if (e.key === "Enter") checkPassword();
-    });
-
-    // 페이지 로드 시 세션 체크
-    window.onload = checkSession;
-
-    // =============== 현황판 로직 (비밀번호 통과 후 실행) ===============
+    // 데이터 로드
     let data = [];
+    function loadData() {
+      Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        complete: (results) => {
+          data = results.data.map(row => ({
+            length: row.길이,
+            type: row.종류,
+            in: parseInt(row.입고) || 0,
+            out: parseInt(row.출고) || 0
+          })).filter(row => row.length && row.type);
+          renderTable();
+        },
+        error: (err) => console.error("CSV 로드 실패:", err)
+      });
+    }
+
+    // 시트 업데이트
+    function updateSheet(length, type, field, amount) {
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ length, type, field, amount }),
+        headers: { "Content-Type": "application/json" }
+      }).then(() => loadData()).catch(err => console.error("업데이트 실패:", err));
+    }
+
+    // 렌더링
     const tableBody = document.getElementById("tableBody");
-    const totalEl = document.getElementById("totalStock");
-    const typesEl = document.getElementById("types");
-    const lowStockEl = document.getElementById("low-stock");
-    const lastUpdateEl = document.getElementById("last-update");
-    let chart;
-
-    function initApp() {
-      data = JSON.parse(localStorage.getItem('tubeData')) || [
-        { length: "1000mm", type: "연마지관", in: 850, out: 0 },
-        { length: "1200mm", type: "일반지관", in: 320, out: 0 },
-        { length: "800mm",  type: "연마지관", in: 95,  out: 0 },
-        { length: "1500mm", type: "일반지관", in: 1500, out: 0 },
-        { length: "900mm",  type: "연마지관", in: 180, out: 0 },
-      ];
-      renderTable();
-    }
-
-    function saveData() {
-      localStorage.setItem('tubeData', JSON.stringify(data));
-    }
-
-    function getCurrentStock(item) {
-      return item.in - item.out;
-    }
-
     function renderTable(filter = "") {
       tableBody.innerHTML = "";
-      let totalStock = 0;
-      let lowCount = 0;
-
-      const filtered = data.filter(item => 
-        item.length.toLowerCase().includes(filter.toLowerCase()) ||
-        item.type.toLowerCase().includes(filter.toLowerCase())
+      let total = 0, low = 0;
+      const filtered = data.filter(d => 
+        d.length.toLowerCase().includes(filter.toLowerCase()) || 
+        d.type.toLowerCase().includes(filter.toLowerCase())
       );
-
-      filtered.forEach((item, index) => {
-        const stock = getCurrentStock(item);
-        totalStock += stock;
-        if (stock <= 0) lowCount++;
-
-        const row = `
+      filtered.forEach((item) => {
+        const stock = item.in - item.out;
+        if (stock <= 0) low++;
+        total += stock;
+        tableBody.innerHTML += `
           <tr ${stock <= 0 ? 'class="alert"' : ''}>
             <td><strong>${item.length}</strong></td>
             <td>${item.type}</td>
-            <td><input type="number" class="num-input" value="${item.in}" min="0" onchange="updateIn(${index}, this.value)"></td>
-            <td><input type="number" class="num-input" value="${item.out}" min="0" onchange="updateOut(${index}, this.value)"></td>
+            <td><input class="num-input" value="${item.in}" onchange="updateSheet('${item.length}', '${item.type}', 'in', this.value - ${item.in})"></td>
+            <td><input class="num-input" value="${item.out}" onchange="updateSheet('${item.length}', '${item.type}', 'out', this.value - ${item.out})"></td>
             <td><strong>${stock}</strong></td>
             <td>${stock <= 0 ? '재고 부족' : '정상'}</td>
             <td>
-              <button class="adjust-btn in" onclick="adjustIn(${index}, 1)">+1</button>
-              <button class="adjust-btn in" onclick="adjustIn(${index}, 10)">+10</button>
+              <button class="adjust-btn in" onclick="updateSheet('${item.length}', '${item.type}', 'in', 1)">+1</button>
+              <button class="adjust-btn in" onclick="updateSheet('${item.length}', '${item.type}', 'in', 10)">+10</button>
             </td>
             <td>
-              <button class="adjust-btn out" onclick="adjustOut(${index}, 1)">-1</button>
-              <button class="adjust-btn out" onclick="adjustOut(${index}, 10)">-10</button>
+              <button class="adjust-btn out" onclick="updateSheet('${item.length}', '${item.type}', 'out', 1)">-1</button>
+              <button class="adjust-btn out" onclick="updateSheet('${item.length}', '${item.type}', 'out', 10)">-10</button>
             </td>
-            <td><button class="delete-btn" onclick="deleteItem(${index})">삭제</button></td>
+            <td><button class="delete-btn" onclick="alert('삭제는 구글 시트에서 직접 해주세요')">삭제</button></td>
           </tr>`;
-        tableBody.innerHTML += row;
       });
-
-      totalEl.textContent = totalStock.toLocaleString();
-      typesEl.textContent = data.length;
-      lowStockEl.textContent = lowCount;
-      lastUpdateEl.textContent = new Date().toLocaleString("ko-KR");
+      document.getElementById("totalStock").textContent = total.toLocaleString();
+      document.getElementById("types").textContent = data.length;
+      document.getElementById("low-stock").textContent = low;
+      document.getElementById("last-update").textContent = new Date().toLocaleString("ko-KR");
       updateChart();
     }
 
-    function filterTable() {
-      const query = document.getElementById("searchInput").value;
-      renderTable(query);
-    }
-
+    // 차트
+    let chart;
     function updateChart() {
       const ctx = document.getElementById('chart').getContext('2d');
       if (chart) chart.destroy();
@@ -263,48 +194,23 @@
           labels: data.map(d => `${d.length} (${d.type})`),
           datasets: [{
             label: '현재 재고',
-            data: data.map(d => getCurrentStock(d)),
-            backgroundColor: data.map(d => {
-              const stock = getCurrentStock(d);
-              if (stock <= 0) return '#e74c3c';
-              return d.type === '연마지관' ? '#3498db' : '#27ae60';
-            })
+            data: data.map(d => d.in - d.out),
+            backgroundColor: data.map(d => (d.in - d.out <= 0) ? '#e74c3c' : (d.type === '연마지관' ? '#3498db' : '#27ae60'))
           }]
         },
         options: { responsive: true, scales: { y: { beginAtZero: true } } }
       });
     }
 
-    function adjustIn(index, amount) { data[index].in += amount; saveData(); renderTable(document.getElementById("searchInput").value); }
-    function adjustOut(index, amount) { data[index].out += amount; saveData(); renderTable(document.getElementById("searchInput").value); }
-    function updateIn(index, value) { data[index].in = Math.max(0, parseInt(value) || 0); saveData(); renderTable(document.getElementById("searchInput").value); }
-    function updateOut(index, value) { data[index].out = Math.max(0, parseInt(value) || 0); saveData(); renderTable(document.getElementById("searchInput").value); }
-
-    function deleteItem(index) {
-      const item = data[index];
-      if (confirm(`"${item.length} (${item.type})" 규격을 삭제하시겠습니까?\n(입고: ${item.in}, 출고: ${item.out}, 재고: ${getCurrentStock(item)})`)) {
-        data.splice(index, 1);
-        saveData();
-        renderTable(document.getElementById("searchInput").value);
-      }
+    // 검색
+    function filterTable() {
+      renderTable(document.getElementById("searchInput").value);
     }
 
+    // 새 규격 추가 (수동)
     document.getElementById("addForm").addEventListener("submit", (e) => {
       e.preventDefault();
-      const length = document.getElementById("newLength").value.trim();
-      const type = document.getElementById("newType").value;
-      const uniqueKey = `${length}-${type}`;
-      if (length && type && !data.some(d => `${d.length}-${d.type}` === uniqueKey)) {
-        data.push({ length, type, in: 0, out: 0 });
-        saveData();
-        renderTable();
-        e.target.reset();
-        alert(`"${length} (${type})" 규격이 추가되었습니다!`);
-      } else if (data.some(d => `${d.length}-${d.type}` === uniqueKey)) {
-        alert("이미 존재하는 규격입니다.");
-      } else {
-        alert("길이와 종류를 모두 입력해주세요.");
-      }
+      alert("새 규격은 구글 시트에 직접 추가해주세요!");
     });
   </script>
 </body>
