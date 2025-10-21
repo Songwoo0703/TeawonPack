@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>지관 갯수 현황판</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
   <style>
     body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
     .container { max-width: 1000px; margin: auto; }
@@ -20,54 +22,200 @@
     th { background: #34495e; color: white; }
     tr:hover { background: #f1f1f1; }
     .alert { background: #fdf2f2; color: #c0392b; font-weight: bold; }
+    canvas { margin: 20px 0; }
+    #addForm { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
+    #addForm input, #addForm select { margin: 5px; padding: 8px; width: 180px; }
+    #addForm button { padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .adjust-btn { padding: 5px 10px; margin: 0 3px; background: #bdc3c7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; }
+    .adjust-btn.in { background: #27ae60; }
+    .adjust-btn.out { background: #e74c3c; }
+    .adjust-btn:hover { opacity: 0.8; }
+    .num-input { width: 70px; text-align: center; padding: 5px; }
+    .delete-btn { background: #e74c3c; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; }
+    #passwordModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 30px; border-radius: 15px; width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    .modal-content input { width: 80%; padding: 12px; margin: 15px 0; font-size: 1.2em; text-align: center; border: 2px solid #ddd; border-radius: 8px; }
+    .modal-content button { padding: 12px 30px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    .error { color: #e74c3c; font-size: 0.9em; margin-top: 5px; display: none; }
+    #logoutBtn { position: absolute; top: 20px; right: 20px; padding: 8px 15px; background: #95a5a6; color: white; border: none; border-radius: 5px; cursor: pointer; display: none; }
   </style>
 </head>
 <body>
-  <div class="container">
+
+  <!-- 비밀번호 -->
+  <div id="passwordModal">
+    <div class="modal-content">
+      <h2>비밀번호 입력</h2>
+      <p>접속하려면 비밀번호를 입력하세요.</p>
+      <input type="password" id="passwordInput" placeholder="비밀번호" maxlength="4">
+      <div class="error" id="errorMsg">비밀번호가 틀렸습니다.</div>
+      <button onclick="checkPassword()">확인</button>
+    </div>
+  </div>
+
+  <button id="logoutBtn" onclick="logout()">로그아웃</button>
+
+  <div class="container" id="mainContent" style="display:none;">
     <h1>지관 갯수 현황판</h1>
-    <p style="text-align:center; color:#7f8c8d">정적 데이터 표시 | 2025-10-21</p>
+    <p style="text-align:center; color:#7f8c8d">구글 시트 실시간 연동 | <span id="last-update"></span></p>
+
+    <!-- 추가 폼 -->
+    <form id="addForm">
+      <h3>새 지관 규격 추가</h3>
+      <input type="text" id="newLength" placeholder="길이 (예: 1200mm)" required>
+      <select id="newType" required>
+        <option value="">종류 선택</option>
+        <option value="연마지관">연마지관</option>
+        <option value="일반지관">일반지관</option>
+      </select>
+      <button type="submit">추가</button>
+    </form>
 
     <div class="stats">
-      <div class="card"><h3>총 재고</h3><p>250</p></div>
-      <div class="card"><h3>규격 수</h3><p>3</p></div>
-      <div class="card"><h3>재고 부족</h3><p class="low">1</p></div>
+      <div class="card"><h3>총 재고</h3><p id="totalStock">0</p></div>
+      <div class="card"><h3>규격 수</h3><p id="types">0</p></div>
+      <div class="card"><h3>재고 부족</h3><p id="low-stock" class="low">0</p></div>
     </div>
 
     <div class="search">
-      <input type="text" placeholder="검색 (정적 데이터로 작동 안 함)">
+      <input type="text" id="searchInput" placeholder="검색" onkeyup="filterTable()">
     </div>
 
     <table id="inventoryTable">
       <thead>
-        <tr><th>길이</th><th>종류</th><th>입고</th><th>출고</th><th>재고</th><th>상태</th></tr>
+        <tr><th>길이</th><th>종류</th><th>입고</th><th>출고</th><th>재고</th><th>상태</th><th>입고</th><th>출고</th><th>삭제</th></tr>
       </thead>
-      <tbody>
-        <tr>
-          <td><strong>1200mm</strong></td>
-          <td>연마지관</td>
-          <td>200</td>
-          <td>50</td>
-          <td><strong>150</strong></td>
-          <td>정상</td>
-        </tr>
-        <tr>
-          <td><strong>1500mm</strong></td>
-          <td>일반지관</td>
-          <td>100</td>
-          <td>0</td>
-          <td><strong>100</strong></td>
-          <td>정상</td>
-        </tr>
-        <tr class="alert">
-          <td><strong>1800mm</strong></td>
-          <td>연마지관</td>
-          <td>50</td>
-          <td>50</td>
-          <td><strong>0</strong></td>
-          <td>재고 부족</td>
-        </tr>
-      </tbody>
+      <tbody id="tableBody"></tbody>
     </table>
+
+    <canvas id="chart"></canvas>
   </div>
+
+  <script>
+    // 설정
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/1gYgJLNalSkrxO-etWVvAYeUuBS0h4phIEdLerpP1Mxk/export?format=csv";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNPFoi4HRGYJxlH62T8IEzQp6qFyQbiITWnnPzg9_5gbPnYSIAZ4Nqh9ItucscHu2bXw/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwCb0ld6uc0MQSdh1ateo0nsnyWRX8zcgxLwrow3iZNCGwx9ehMw1y_aq-a5JHOKIzDnQ/exec";
+    const PASSWORD = "1706";
+
+    // 비밀번호
+    function checkPassword() {
+      if (document.getElementById("passwordInput").value === PASSWORD) {
+        localStorage.setItem("access", "true");
+        showMain();
+      } else {
+        document.getElementById("errorMsg").style.display = "block";
+      }
+    }
+    function showMain() {
+      document.getElementById("passwordModal").style.display = "none";
+      document.getElementById("mainContent").style.display = "block";
+      document.getElementById("logoutBtn").style.display = "block";
+      loadData();
+      setInterval(loadData, 8000);
+    }
+    function logout() { localStorage.removeItem("access"); location.reload(); }
+    if (localStorage.getItem("access")) showMain();
+    else document.getElementById("passwordModal").style.display = "flex";
+
+    // 데이터
+    let data = [];
+    function loadData() {
+      Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        complete: (res) => {
+          data = res.data
+            .map(r => ({ length: r.길이, type: r.종류, in: +r.입고 || 0, out: +r.출고 || 0 }))
+            .filter(r => r.length && r.type);
+          renderTable();
+        }
+      });
+    }
+
+    // 업데이트
+    function send(action, payload) {
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action, ...payload }),
+        headers: { "Content-Type": "application/json" }
+      }).then(() => loadData());
+    }
+
+    // 렌더링
+    function renderTable(filter = "") {
+      const tbody = document.getElementById("tableBody");
+      tbody.innerHTML = "";
+      let total = 0, low = 0;
+      const filtered = data.filter(d =>
+        d.length.toLowerCase().includes(filter.toLowerCase()) ||
+        d.type.toLowerCase().includes(filter.toLowerCase())
+      );
+      filtered.forEach(item => {
+        const stock = item.in - item.out;
+        if (stock <= 0) low++;
+        total += stock;
+        tbody.innerHTML += `
+          <tr ${stock <= 0 ? 'class="alert"' : ''}>
+            <td><strong>${item.length}</strong></td>
+            <td>${item.type}</td>
+            <td><input class="num-input" value="${item.in}" onchange="send('update', {length:'${item.length}', type:'${item.type}', field:'in', amount: this.value - ${item.in}})"></td>
+            <td><input class="num-input" value="${item.out}" onchange="send('update', {length:'${item.length}', type:'${item.type}', field:'out', amount: this.value - ${item.out}})"></td>
+            <td><strong>${stock}</strong></td>
+            <td>${stock <= 0 ? '재고 부족' : '정상'}</td>
+            <td>
+              <button class="adjust-btn in" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'in', amount:1})">+1</button>
+              <button class="adjust-btn in" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'in', amount:10})">+10</button>
+            </td>
+            <td>
+              <button class="adjust-btn out" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'out', amount:1})">-1</button>
+              <button class="adjust-btn out" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'out', amount:10})">-10</button>
+            </td>
+            <td><button class="delete-btn" onclick="if(confirm('삭제하시겠습니까?')) send('delete', {length:'${item.length}', type:'${item.type}'})">삭제</button></td>
+          </tr>`;
+      });
+      document.getElementById("totalStock").textContent = total.toLocaleString();
+      document.getElementById("types").textContent = data.length;
+      document.getElementById("low-stock").textContent = low;
+      document.getElementById("last-update").textContent = new Date().toLocaleString("ko-KR");
+      updateChart();
+    }
+
+    // 차트
+    let chart;
+    function updateChart() {
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.map(d => `${d.length} (${d.type})`),
+          datasets: [{
+            label: '재고',
+            data: data.map(d => d.in - d.out),
+            backgroundColor: data.map(d => (d.in - d.out <= 0) ? '#e74c3c' : (d.type === '연마지관' ? '#3498db' : '#27ae60'))
+          }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    // 추가
+    document.getElementById("addForm").onsubmit = (e) => {
+      e.preventDefault();
+      const length = document.getElementById("newLength").value.trim();
+      const type = document.getElementById("newType").value;
+      if (length && type && !data.some(d => d.length === length && d.type === type)) {
+        send("add", { length, type });
+        e.target.reset();
+      } else {
+        alert("이미 존재하거나 입력이 잘못되었습니다.");
+      }
+    };
+
+    function filterTable() {
+      renderTable(document.getElementById("searchInput").value);
+    }
+  </script>
 </body>
 </html>
