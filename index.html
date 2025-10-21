@@ -42,12 +42,12 @@
 </head>
 <body>
 
-  <!-- 비밀번호 모달 -->
+  <!-- 비밀번호 -->
   <div id="passwordModal">
     <div class="modal-content">
       <h2>비밀번호 입력</h2>
-      <p>지관 현황판에 접근하려면 비밀번호를 입력하세요.</p>
-      <input type="password" id="passwordInput" placeholder="비밀번호 입력" maxlength="4">
+      <p>접속하려면 비밀번호를 입력하세요.</p>
+      <input type="password" id="passwordInput" placeholder="비밀번호" maxlength="4">
       <div class="error" id="errorMsg">비밀번호가 틀렸습니다.</div>
       <button onclick="checkPassword()">확인</button>
     </div>
@@ -59,6 +59,7 @@
     <h1>지관 갯수 현황판</h1>
     <p style="text-align:center; color:#7f8c8d">구글 시트 실시간 연동 | <span id="last-update"></span></p>
 
+    <!-- 추가 폼 -->
     <form id="addForm">
       <h3>새 지관 규격 추가</h3>
       <input type="text" id="newLength" placeholder="길이 (예: 1200mm)" required>
@@ -67,7 +68,7 @@
         <option value="연마지관">연마지관</option>
         <option value="일반지관">일반지관</option>
       </select>
-      <button type="submit">규격 추가</button>
+      <button type="submit">추가</button>
     </form>
 
     <div class="stats">
@@ -77,12 +78,12 @@
     </div>
 
     <div class="search">
-      <input type="text" id="searchInput" placeholder="길이 또는 종류로 검색" onkeyup="filterTable()">
+      <input type="text" id="searchInput" placeholder="검색" onkeyup="filterTable()">
     </div>
 
     <table id="inventoryTable">
       <thead>
-        <tr><th>길이</th><th>종류</th><th>입고</th><th>출고</th><th>현재 재고</th><th>상태</th><th>입고</th><th>출고</th><th>삭제</th></tr>
+        <tr><th>길이</th><th>종류</th><th>입고</th><th>출고</th><th>재고</th><th>상태</th><th>입고</th><th>출고</th><th>삭제</th></tr>
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
@@ -91,89 +92,85 @@
   </div>
 
   <script>
-    // 설정값 (완성!)
+    // 설정
     const CSV_URL = "https://docs.google.com/spreadsheets/d/1gYgJLNalSkrxO-etWVvAYeUuBS0h4phIEdLerpP1Mxk/export?format=csv";
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxjJnfrn55wPghz_Exshr1WDHcxuZ8dmcvdNGd9UfVDNe7woccZ5YYg-e0v9ZBrtQmQ9A/exec";
-    const CORRECT_PASSWORD = "1706";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzrcUKk5WnEfuqMaQs8pZ1cyBy_QhS6LOtGHP8XtzTrpaPznRDUjCnCjDTMJc9q9X8gJA/exec";
+    const PASSWORD = "1706";
 
     // 비밀번호
     function checkPassword() {
-      if (document.getElementById("passwordInput").value === CORRECT_PASSWORD) {
-        localStorage.setItem("tubeAccess", "true");
-        showMainContent();
+      if (document.getElementById("passwordInput").value === PASSWORD) {
+        localStorage.setItem("access", "true");
+        showMain();
       } else {
         document.getElementById("errorMsg").style.display = "block";
       }
     }
-    function showMainContent() {
+    function showMain() {
       document.getElementById("passwordModal").style.display = "none";
       document.getElementById("mainContent").style.display = "block";
       document.getElementById("logoutBtn").style.display = "block";
       loadData();
-      setInterval(loadData, 10000); // 10초마다 갱신
+      setInterval(loadData, 8000);
     }
-    function logout() { localStorage.removeItem("tubeAccess"); location.reload(); }
-    if (localStorage.getItem("tubeAccess")) showMainContent();
+    function logout() { localStorage.removeItem("access"); location.reload(); }
+    if (localStorage.getItem("access")) showMain();
     else document.getElementById("passwordModal").style.display = "flex";
 
-    // 데이터 로드
+    // 데이터
     let data = [];
     function loadData() {
       Papa.parse(CSV_URL, {
         download: true,
         header: true,
-        complete: (results) => {
-          data = results.data.map(row => ({
-            length: row.길이,
-            type: row.종류,
-            in: parseInt(row.입고) || 0,
-            out: parseInt(row.출고) || 0
-          })).filter(row => row.length && row.type);
+        complete: (res) => {
+          data = res.data
+            .map(r => ({ length: r.길이, type: r.종류, in: +r.입고 || 0, out: +r.출고 || 0 }))
+            .filter(r => r.length && r.type);
           renderTable();
-        },
-        error: (err) => console.error("CSV 로드 실패:", err)
+        }
       });
     }
 
-    // 시트 업데이트
-    function updateSheet(length, type, field, amount) {
+    // 업데이트
+    function send(action, payload) {
       fetch(APPS_SCRIPT_URL, {
         method: "POST",
-        body: JSON.stringify({ length, type, field, amount }),
+        body: JSON.stringify({ action, ...payload }),
         headers: { "Content-Type": "application/json" }
-      }).then(() => loadData()).catch(err => console.error("업데이트 실패:", err));
+      }).then(() => loadData());
     }
 
     // 렌더링
-    const tableBody = document.getElementById("tableBody");
     function renderTable(filter = "") {
-      tableBody.innerHTML = "";
+      const tbody = document.getElementById("tableBody");
+      tbody.innerHTML = "";
       let total = 0, low = 0;
-      const filtered = data.filter(d => 
-        d.length.toLowerCase().includes(filter.toLowerCase()) || 
+      const filtered = data.filter(d =>
+        d.length.toLowerCase().includes(filter.toLowerCase()) ||
         d.type.toLowerCase().includes(filter.toLowerCase())
       );
-      filtered.forEach((item) => {
+      filtered.forEach(item => {
         const stock = item.in - item.out;
         if (stock <= 0) low++;
         total += stock;
-        tableBody.innerHTML += `
+        tbody.innerHTML += `
           <tr ${stock <= 0 ? 'class="alert"' : ''}>
             <td><strong>${item.length}</strong></td>
             <td>${item.type}</td>
-            <td><input class="num-input" value="${item.in}" onchange="updateSheet('${item.length}', '${item.type}', 'in', this.value - ${item.in})"></td>
-            <td><input class="num-input" value="${item.out}" onchange="updateSheet('${item.length}', '${item.type}', 'out', this.value - ${item.out})"></td>
+            <td><input class="num-input" value="${item.in}" onchange="send('update', {length:'${item.length}', type:'${item.type}', field:'in', amount: this.value - ${item.in}})"></td>
+            <td><input class="num-input" value="${item.out}" onchange="send('update', {length:'${item.length}', type:'${item.type}', field:'out', amount: this.value - ${item.out}})"></td>
             <td><strong>${stock}</strong></td>
             <td>${stock <= 0 ? '재고 부족' : '정상'}</td>
             <td>
-              <button class="adjust-btn in" onclick="updateSheet('${item.length}', '${item.type}', 'in', 1)">+1</button>
-              <button class="adjust-btn in" onclick="updateSheet('${item.length}', '${item.type}', 'in', 10)">+10</button>
+              <button class="adjust-btn in" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'in', amount:1})">+1</button>
+              <button class="adjust-btn in" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'in', amount:10})">+10</button>
             </td>
             <td>
-              <button class="adjust-btn out" onclick="updateSheet('${item.length}', '${item.type}', 'out', 1)">-1</button>
-              <button class="adjust-btn out" onclick="updateSheet('${item.length}', '${item.type}', 'out', 10)">-10</button>
+              <button class="adjust-btn out" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'out', amount:1})">-1</button>
+              <button class="adjust-btn out" onclick="send('update', {length:'${item.length}', type:'${item.type}', field:'out', amount:10})">-10</button>
             </td>
-            <td><button class="delete-btn" onclick="alert('삭제는 구글 시트에서 직접 해주세요')">삭제</button></td>
+            <td><button class="delete-btn" onclick="if(confirm('삭제하시겠습니까?')) send('delete', {length:'${item.length}', type:'${item.type}'})">삭제</button></td>
           </tr>`;
       });
       document.getElementById("totalStock").textContent = total.toLocaleString();
@@ -193,7 +190,7 @@
         data: {
           labels: data.map(d => `${d.length} (${d.type})`),
           datasets: [{
-            label: '현재 재고',
+            label: '재고',
             data: data.map(d => d.in - d.out),
             backgroundColor: data.map(d => (d.in - d.out <= 0) ? '#e74c3c' : (d.type === '연마지관' ? '#3498db' : '#27ae60'))
           }]
@@ -202,16 +199,22 @@
       });
     }
 
-    // 검색
+    // 추가
+    document.getElementById("addForm").onsubmit = (e) => {
+      e.preventDefault();
+      const length = document.getElementById("newLength").value.trim();
+      const type = document.getElementById("newType").value;
+      if (length && type && !data.some(d => d.length === length && d.type === type)) {
+        send("add", { length, type });
+        e.target.reset();
+      } else {
+        alert("이미 존재하거나 입력이 잘못되었습니다.");
+      }
+    };
+
     function filterTable() {
       renderTable(document.getElementById("searchInput").value);
     }
-
-    // 새 규격 추가 (수동)
-    document.getElementById("addForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      alert("새 규격은 구글 시트에 직접 추가해주세요!");
-    });
   </script>
 </body>
 </html>
